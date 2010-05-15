@@ -574,7 +574,7 @@ public static class KeywordExpr implements Expr{
 
 public static class ImportExpr implements Expr{
 	public final String c;
-	final static Method forNameMethod = Method.getMethod("Class forName(String)");
+	final static Method forNameMethod = Method.getMethod("Class classForName(String)");
 	final static Method importClassMethod = Method.getMethod("Class importClass(Class)");
 	final static Method derefMethod = Method.getMethod("Object deref()");
 
@@ -593,7 +593,7 @@ public static class ImportExpr implements Expr{
 		gen.invokeVirtual(VAR_TYPE, derefMethod);
 		gen.checkCast(NS_TYPE);
 		gen.push(c);
-		gen.invokeStatic(CLASS_TYPE, forNameMethod);
+		gen.invokeStatic(RT_TYPE, forNameMethod);
 		gen.invokeVirtual(NS_TYPE, importClassMethod);
 		if(context == C.STATEMENT)
 			gen.pop();

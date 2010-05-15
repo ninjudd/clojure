@@ -184,7 +184,7 @@ final static public Var MATH_CONTEXT = Var.intern(CLOJURE_NS, Symbol.create("*ma
 static Keyword LINE_KEY = Keyword.intern(null, "line");
 static Keyword FILE_KEY = Keyword.intern(null, "file");
 final static public Var USE_CONTEXT_CLASSLOADER =
-		Var.intern(CLOJURE_NS, Symbol.create("*use-context-classloader*"), T);
+		Var.intern(CLOJURE_NS, Symbol.create("*use-context-classloader*"), F);
 //final static public Var CURRENT_MODULE = Var.intern(Symbol.create("clojure.core", "current-module"),
 //                                                    Module.findOrCreateModule("clojure/user"));
 
@@ -1544,10 +1544,10 @@ static public ClassLoader makeClassLoader(){
 }
 
 static public ClassLoader baseLoader(){
-	if(Compiler.LOADER.isBound())
-		return (ClassLoader) Compiler.LOADER.deref();
-	else if(booleanCast(USE_CONTEXT_CLASSLOADER.deref()))
+	if(booleanCast(USE_CONTEXT_CLASSLOADER.deref()))
 		return Thread.currentThread().getContextClassLoader();
+	else if(Compiler.LOADER.isBound())
+		return (ClassLoader) Compiler.LOADER.deref();
 	return Compiler.class.getClassLoader();
 }
 
