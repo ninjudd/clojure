@@ -47,7 +47,7 @@ static Pattern symbolPat = Pattern.compile("[:]?([\\D&&[^/]].*/)?([\\D&&[^/]][^/
 //static Pattern intPat = Pattern.compile("[-+]?[0-9]+\\.?");
 static Pattern intPat =
 		Pattern.compile(
-				"([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)");
+				"([-+]?)(?:(0)|([1-9][0-9]*)|0[xX]([0-9A-Fa-f]+)|0([0-7]+)|([1-9][0-9]?)[rR]([0-9A-Za-z]+)|0[0-9]+)(N)?");
 static Pattern ratioPat = Pattern.compile("([-+]?[0-9]+)/([0-9]+)");
 static Pattern floatPat = Pattern.compile("([-+]?[0-9]+(\\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?");
 static final Symbol SLASH = Symbol.create("/");
@@ -307,7 +307,10 @@ private static Object matchSymbol(String s){
 			else
 				kns = Compiler.currentNS();
 			//auto-resolving keyword
-			return Keyword.intern(kns.name.name,ks.name);
+            if (kns != null)
+			    return Keyword.intern(kns.name.name,ks.name);
+            else
+                return null;    
 			}
 		boolean isKeyword = s.charAt(0) == ':';
 		Symbol sym = Symbol.intern(s.substring(isKeyword ? 1 : 0));
@@ -324,7 +327,11 @@ private static Object matchNumber(String s){
 	if(m.matches())
 		{
 		if(m.group(2) != null)
-			return 0;
+			{
+			if(m.group(8) != null)
+				return BigInt.ZERO;
+			return Numbers.num(0);
+			}
 		boolean negate = (m.group(1).equals("-"));
 		String n;
 		int radix = 10;
@@ -339,7 +346,13 @@ private static Object matchNumber(String s){
 		if(n == null)
 			return null;
 		BigInteger bn = new BigInteger(n, radix);
-		return Numbers.reduce(negate ? bn.negate() : bn);
+		if(negate)
+			bn = bn.negate();
+		if(m.group(8) != null)
+			return BigInt.fromBigInteger(bn);
+		return bn.bitLength() < 64 ?
+		        Numbers.num(bn.longValue())
+				: BigInt.fromBigInteger(bn);
 		}
 	m = floatPat.matcher(s);
 	if(m.matches())
@@ -351,7 +364,8 @@ private static Object matchNumber(String s){
 	m = ratioPat.matcher(s);
 	if(m.matches())
 		{
-		return Numbers.divide(new BigInteger(m.group(1)), new BigInteger(m.group(2)));
+		return Numbers.divide(Numbers.reduceBigInt(BigInt.fromBigInteger(new BigInteger(m.group(1)))),
+		                      Numbers.reduceBigInt(BigInt.fromBigInteger(new BigInteger(m.group(2)))));
 		}
 	return null;
 }
@@ -367,7 +381,7 @@ static private boolean isMacro(int ch){
 }
 
 static private boolean isTerminatingMacro(int ch){
-	return (ch != '#' && ch < macros.length && macros[ch] != null);
+	return (ch != '#' && ch != '\'' && isMacro(ch));
 }
 
 public static class RegexReader extends AFn{
@@ -654,8 +668,10 @@ public static class MetaReader extends AFn{
 		if(r instanceof LineNumberingPushbackReader)
 			line = ((LineNumberingPushbackReader) r).getLineNumber();
 		Object meta = read(r, true, null, true);
-		if(meta instanceof Symbol || meta instanceof Keyword || meta instanceof String)
+		if(meta instanceof Symbol || meta instanceof String)
 			meta = RT.map(RT.TAG_KEY, meta);
+		else if (meta instanceof Keyword)
+			meta = RT.map(meta, RT.T);
 		else if(!(meta instanceof IPersistentMap))
 			throw new IllegalArgumentException("Metadata must be Symbol,Keyword,String or Map");
 
@@ -669,7 +685,12 @@ public static class MetaReader extends AFn{
 				((IReference)o).resetMeta((IPersistentMap) meta);
 				return o;
 				}
-			return ((IObj) o).withMeta((IPersistentMap) meta);
+			Object ometa = RT.meta(o);
+			for(ISeq s = RT.seq(meta); s != null; s = s.next()) {
+				IMapEntry kv = (IMapEntry) s.first();
+				ometa = RT.assoc(ometa, kv.getKey(), kv.getValue());
+				}
+			return ((IObj) o).withMeta((IPersistentMap) ometa);
 			}
 		else
 			throw new IllegalArgumentException("Metadata can only be applied to IMetas");

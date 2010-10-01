@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Callable;
 import java.util.*;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.io.*;
 import java.lang.reflect.Array;
 import java.math.BigDecimal;
@@ -183,6 +184,7 @@ final static public Var ASSERT = Var.intern(CLOJURE_NS, Symbol.create("*assert*"
 final static public Var MATH_CONTEXT = Var.intern(CLOJURE_NS, Symbol.create("*math-context*"), null);
 static Keyword LINE_KEY = Keyword.intern(null, "line");
 static Keyword FILE_KEY = Keyword.intern(null, "file");
+static Keyword DECLARED_KEY = Keyword.intern(null, "declared");
 final static public Var USE_CONTEXT_CLASSLOADER =
 		Var.intern(CLOJURE_NS, Symbol.create("*use-context-classloader*"), null);
 //final static public Var CURRENT_MODULE = Var.intern(Symbol.create("clojure.core", "current-module"),
@@ -412,9 +414,6 @@ static public void load(String scriptbase, boolean failIfNotFound) throws Except
 
 static void doInit() throws Exception{
 	load("clojure/core");
-	load("clojure/zip", false);
-	load("clojure/xml", false);
-	load("clojure/set", false);
 
 	Var.pushThreadBindings(
 			RT.map(CURRENT_NS, CURRENT_NS.deref(),
@@ -726,7 +725,7 @@ static Object nthFrom(Object coll, int n){
 	else if(coll instanceof CharSequence)
 		return Character.valueOf(((CharSequence) coll).charAt(n));
 	else if(coll.getClass().isArray())
-		return Reflector.prepRet(Array.get(coll, n));
+		return Reflector.prepRet(coll.getClass().getComponentType(),Array.get(coll, n));
 	else if(coll instanceof RandomAccess)
 		return ((List) coll).get(n);
 	else if(coll instanceof Matcher)
@@ -777,7 +776,7 @@ static Object nthFrom(Object coll, int n, Object notFound){
 	}
 	else if(coll.getClass().isArray()) {
 		if(n < Array.getLength(coll))
-			return Reflector.prepRet(Array.get(coll, n));
+			return Reflector.prepRet(coll.getClass().getComponentType(),Array.get(coll, n));
 		return notFound;
 	}
 	else if(coll instanceof RandomAccess) {
@@ -893,8 +892,14 @@ static public boolean booleanCast(Object x){
 	return x != null;
 }
 
+static public boolean booleanCast(boolean x){
+	return x;
+}
+
 static public byte byteCast(Object x){
-	long n = ((Number) x).longValue();
+	if(x instanceof Byte)
+		return ((Byte) x).byteValue();
+	long n = longCast(x);
 	if(n < Byte.MIN_VALUE || n > Byte.MAX_VALUE)
 		throw new IllegalArgumentException("Value out of range for byte: " + x);
 
@@ -902,7 +907,9 @@ static public byte byteCast(Object x){
 }
 
 static public short shortCast(Object x){
-	long n = ((Number) x).longValue();
+	if(x instanceof Short)
+		return ((Short) x).shortValue();
+	long n = longCast(x);
 	if(n < Short.MIN_VALUE || n > Short.MAX_VALUE)
 		throw new IllegalArgumentException("Value out of range for short: " + x);
 
@@ -913,7 +920,10 @@ static public int intCast(Object x){
 	if(x instanceof Integer)
 		return ((Integer)x).intValue();
 	if(x instanceof Number)
-		return intCast(((Number) x).longValue());
+		{
+		long n = longCast(x);
+		return intCast(n);
+		}
 	return ((Character) x).charValue();
 }
 
@@ -952,6 +962,24 @@ static public int intCast(double x){
 }
 
 static public long longCast(Object x){
+	if(x instanceof Integer || x instanceof Long)
+		return ((Number) x).longValue();
+	else if (x instanceof BigInt)
+		{
+		BigInt bi = (BigInt) x;
+		if(bi.bipart == null)
+			return bi.lpart;
+		else
+			throw new IllegalArgumentException("Value out of range for long: " + x);
+		}
+	else if (x instanceof BigInteger)
+		{
+		BigInteger bi = (BigInteger) x;
+		if(bi.bitLength() < 64)
+			return bi.longValue();
+		else
+			throw new IllegalArgumentException("Value out of range for long: " + x);
+		}
 	return ((Number) x).longValue();
 }
 
@@ -1393,9 +1421,21 @@ static public void print(Object x, Writer w) throws Exception{
 			w.write(x.toString());
 			w.write('M');
 		}
+		else if(x instanceof BigInt && readably) {
+			w.write(x.toString());
+			w.write('N');
+		}
+		else if(x instanceof BigInteger && readably) {
+			w.write(x.toString());
+			w.write("BIGINT");
+		}
 		else if(x instanceof Var) {
 			Var v = (Var) x;
 			w.write("#=(var " + v.ns.name + "/" + v.sym + ")");
+		}
+		else if(x instanceof Pattern) {
+			Pattern p = (Pattern) x;
+			w.write("#\"" + p.pattern() + "\"");
 		}
 		else w.write(x.toString());
 	}

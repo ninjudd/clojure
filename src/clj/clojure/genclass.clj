@@ -90,7 +90,18 @@
               strx
               (str "java.lang." strx))))))
 
+;; someday this can be made codepoint aware
+(defn- valid-java-method-name
+  [^String s]
+  (= s (clojure.lang.Compiler/munge s)))
+
+(defn- validate-generate-class-options
+  [{:keys [methods]}]
+  (let [[mname] (remove valid-java-method-name (map (comp str first) methods))]
+    (when mname (throw (IllegalArgumentException. (str "Not a valid method name: " mname))))))
+
 (defn- generate-class [options-map]
+  (validate-generate-class-options options-map)
   (let [default-options {:prefix "-" :load-impl-ns true :impl-ns (ns-name *ns*)}
         {:keys [name extends implements constructors methods main factory state init exposes 
                 exposes-methods prefix load-impl-ns impl-ns post-init]} 
@@ -132,7 +143,7 @@
         all-sigs (distinct (concat (map #(let[[m p] (key %)] {m [p]}) (mapcat non-private-methods supers))
                                    (map (fn [[m p]] {(str m) [p]}) methods)))
         sigs-by-name (apply merge-with concat {} all-sigs)
-        overloads (into {} (filter (fn [[m s]] (next s)) sigs-by-name))
+        overloads (into1 {} (filter (fn [[m s]] (next s)) sigs-by-name))
         var-fields (concat (when init [init-name]) 
                            (when post-init [post-init-name])
                            (when main [main-name])
@@ -299,7 +310,7 @@
                                                   (arg-types (count ptypes)))))
                                         ;expecting [[super-ctor-args] state] returned
             (. gen dup)
-            (. gen push 0)
+            (. gen push (int 0))
             (. gen (invokeStatic rt-type nth-method))
             (. gen storeLocal local)
             
@@ -307,14 +318,14 @@
             (. gen dupX1)
             (dotimes [i (count super-pclasses)]
               (. gen loadLocal local)
-              (. gen push i)
+              (. gen push (int i))
               (. gen (invokeStatic rt-type nth-method))
               (. clojure.lang.Compiler$HostExpr (emitUnboxArg nil gen (nth super-pclasses i))))
             (. gen (invokeConstructor super-type super-m))
             
             (if state
               (do
-                (. gen push 1)
+                (. gen push (int 1))
                 (. gen (invokeStatic rt-type nth-method))
                 (. gen (putField ctype state-name obj-type)))
               (. gen pop))
@@ -380,7 +391,7 @@
                                                                (. m (getName))
                                                                (. m (getDescriptor)))))))
                                         ;add methods matching interfaces', if no fn -> throw
-      (reduce (fn [mm ^java.lang.reflect.Method meth]
+      (reduce1 (fn [mm ^java.lang.reflect.Method meth]
                 (if (contains? mm (method-sig meth))
                   mm
                   (do
@@ -393,7 +404,7 @@
          (emit-forwarding-method mname pclasses rclass (:static (meta msig))
                                  emit-unsupported))
                                         ;expose specified overridden superclass methods
-       (doseq [[local-mname ^java.lang.reflect.Method m] (reduce (fn [ms [[name _ _] m]]
+       (doseq [[local-mname ^java.lang.reflect.Method m] (reduce1 (fn [ms [[name _ _] m]]
                               (if (contains? exposes-methods (symbol name))
                                 (conj ms [((symbol name) exposes-methods) m])
                                 ms)) [] (seq mm))]
@@ -599,7 +610,7 @@
   
   [& options]
     (when *compile-files*
-      (let [options-map (into {} (map vec (partition 2 options)))
+      (let [options-map (into1 {} (map vec (partition 2 options)))
             [cname bytecode] (generate-class options-map)]
         (clojure.lang.Compiler/writeClassFile cname bytecode))))
 

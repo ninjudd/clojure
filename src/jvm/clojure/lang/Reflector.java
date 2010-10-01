@@ -87,7 +87,7 @@ static Object invokeMatchingMethod(String methodName, List methods, Object targe
 		}
 	try
 		{
-		return prepRet(m.invoke(target, boxedArgs));
+		return prepRet(m.getReturnType(), m.invoke(target, boxedArgs));
 		}
 	catch(InvocationTargetException e)
 		{
@@ -213,7 +213,7 @@ public static Object getStaticField(Class c, String fieldName) throws Exception{
 	Field f = getField(c, fieldName, true);
 	if(f != null)
 		{
-		return prepRet(f.get(null));
+		return prepRet(f.getType(), f.get(null));
 		}
 	throw new IllegalArgumentException("No matching field found: " + fieldName
 		+ " for " + c);
@@ -240,7 +240,7 @@ public static Object getInstanceField(Object target, String fieldName) throws Ex
 	Field f = getField(c, fieldName, false);
 	if(f != null)
 		{
-		return prepRet(f.get(target));
+		return prepRet(f.getType(), f.get(target));
 		}
 	throw new IllegalArgumentException("No matching field found: " + fieldName
 		+ " for " + target.getClass());
@@ -273,7 +273,7 @@ public static Object invokeInstanceMember(Object target, String name) throws Exc
 	Field f = getField(c, name, false);
 	if(f != null)  //field get
 		{
-		return prepRet(f.get(target));
+		return prepRet(f.getType(), f.get(target));
 		}
 	return invokeInstanceMethod(target, name, RT.EMPTY_ARRAY);
 }
@@ -405,13 +405,18 @@ static public boolean paramArgTypeMatch(Class paramType, Class argType){
 	if(paramType == argType || paramType.isAssignableFrom(argType))
 		return true;
 	if(paramType == int.class)
-		return argType == Integer.class;// || argType == FixNum.class;
+		return argType == Integer.class
+		       || argType == long.class
+				|| argType == Long.class;// || argType == FixNum.class;
 	else if(paramType == float.class)
-		return argType == Float.class;
+		return argType == Float.class
+				|| argType == double.class;
 	else if(paramType == double.class)
-		return argType == Double.class;// || argType == DoubleNum.class;
+		return argType == Double.class
+				|| argType == float.class;// || argType == DoubleNum.class;
 	else if(paramType == long.class)
-		return argType == Long.class;// || argType == BigNum.class;
+		return argType == Long.class
+				|| argType == int.class;// || argType == BigNum.class;
 	else if(paramType == char.class)
 		return argType == Character.class;
 	else if(paramType == short.class)
@@ -441,11 +446,17 @@ static boolean isCongruent(Class[] params, Object[] args){
 	return ret;
 }
 
-public static Object prepRet(Object x){
-//	if(c == boolean.class)
-//		return ((Boolean) x).booleanValue() ? RT.T : null;
+public static Object prepRet(Class c, Object x){
+	if (!(c.isPrimitive() || c == Boolean.class))
+		return x;
 	if(x instanceof Boolean)
 		return ((Boolean) x)?Boolean.TRUE:Boolean.FALSE;
+	else if(x instanceof Integer)
+		{
+		return ((Integer)x).longValue();
+		}
+	else if(x instanceof Float)
+			return Double.valueOf(((Float) x).doubleValue());
 	return x;
 }
 }

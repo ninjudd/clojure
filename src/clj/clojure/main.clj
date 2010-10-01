@@ -13,7 +13,8 @@
   clojure.main
   (:refer-clojure :exclude [with-bindings])
   (:import (clojure.lang Compiler Compiler$CompilerException
-                         LineNumberingPushbackReader RT)))
+                         LineNumberingPushbackReader RT))
+  (:use [clojure.repl :only (demunge root-cause stack-element-str)]))
 
 (declare main)
 
@@ -72,7 +73,7 @@
      (= c (int \newline)) :line-start
      (= c -1) :stream-end
      (= c (int \;)) (do (.readLine s) :line-start)
-     (or (Character/isWhitespace c) (= c (int \,))) (recur (.read s))
+     (or (Character/isWhitespace (char c)) (= c (int \,))) (recur (.read s))
      :else (do (.unread s c) :body))))
 
 (defn repl-read
@@ -93,27 +94,21 @@
         (skip-if-eol *in*)
         input)))
 
-(defn- root-cause
-  "Returns the initial cause of an exception or error by peeling off all of
-  its wrappers"
-  [^Throwable throwable]
-  (loop [cause throwable]
-    (if-let [cause (.getCause cause)]
-      (recur cause)
-      cause)))
-
 (defn repl-exception
-  "Returns CompilerExceptions in tact, but only the root cause of other
-  throwables"
+  "Returns the root cause of throwables"
   [throwable]
-  (if (instance? Compiler$CompilerException throwable)
-    throwable
-    (root-cause throwable)))
+  (root-cause throwable))
 
 (defn repl-caught
   "Default :caught hook for repl"
   [e]
-  (.println *err* (repl-exception e)))
+  (let [ex (repl-exception e)
+        el (aget (.getStackTrace ex) 0)]
+    (.println *err*
+              (str (-> ex class .getSimpleName)
+                   " " (.getMessage ex) " "
+                   (when-not (instance? clojure.lang.Compiler$CompilerException ex)
+                     (str " " (stack-element-str el)))))))
 
 (defn repl
   "Generic, reusable, read-eval-print loop. By default, reads from *in*,
@@ -192,11 +187,18 @@
       (catch Throwable e
         (caught e)
         (set! *e e)))
-     (use 'clojure.repl)
+     (use '[clojure.repl :only (source apropos dir pst)])
+     (use '[clojure.java.javadoc :only (javadoc)])
+     (use '[clojure.pprint :only (pp pprint)])
      (prompt)
      (flush)
      (loop []
-       (when-not (= (read-eval-print) request-exit)
+       (when-not 
+       	 (try (= (read-eval-print) request-exit)
+	  (catch Throwable e
+	   (caught e)
+	   (set! *e e)
+	   nil))
          (when (need-prompt)
            (prompt)
            (flush))

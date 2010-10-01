@@ -17,7 +17,8 @@
 ;;  Created 22 October 2008
 
 (ns clojure.test-clojure.reader
-  (:use clojure.test))
+  (:use clojure.test)
+  (:import clojure.lang.BigInt))
 
 ;; Symbols
 
@@ -53,14 +54,14 @@
 (deftest Numbers
 
   ; Read Integer
-  (is (instance? Integer 2147483647))
-  (is (instance? Integer +1))
-  (is (instance? Integer 1))
-  (is (instance? Integer +0))
-  (is (instance? Integer 0))
-  (is (instance? Integer -0))
-  (is (instance? Integer -1))
-  (is (instance? Integer -2147483648))
+  (is (instance? Long 2147483647))
+  (is (instance? Long +1))
+  (is (instance? Long 1))
+  (is (instance? Long +0))
+  (is (instance? Long 0))
+  (is (instance? Long -0))
+  (is (instance? Long -1))
+  (is (instance? Long -2147483648))
 
   ; Read Long
   (is (instance? Long 2147483648))
@@ -77,14 +78,14 @@
                        (recur (inc i) (conj l i))
                        l))]
       (is (= [4 3 2 1 0] sequence))
-      (is (every? #(instance? Integer %)
+      (is (every? #(instance? Long %)
                   sequence))))
 
   ; Read BigInteger
-  (is (instance? BigInteger 9223372036854775808))
-  (is (instance? BigInteger -9223372036854775809))
-  (is (instance? BigInteger 10000000000000000000000000000000000000000000000000))
-  (is (instance? BigInteger -10000000000000000000000000000000000000000000000000))
+  (is (instance? BigInt 9223372036854775808))
+  (is (instance? BigInt -9223372036854775809))
+  (is (instance? BigInt 10000000000000000000000000000000000000000000000000))
+  (is (instance? BigInt -10000000000000000000000000000000000000000000000000))
 
   ; Read Double
   (is (instance? Double +1.0e+1))
@@ -235,6 +236,15 @@
   (is (instance? clojure.lang.Keyword :alphabet))
   )
 
+(deftest reading-keywords
+  (are [x y] (= x (read-string y))
+       :foo ":foo"
+       :foo/bar ":foo/bar"
+       :user/foo "::foo")
+  (are [err msg form] (thrown-with-msg? err msg (read-string form))
+       Exception #"Invalid token: foo:" "foo:"
+       Exception #"Invalid token: :bar/" ":bar/"
+       Exception #"Invalid token: ::does.not/exist" "::does.not/exist"))
 ;; Lists
 
 (deftest t-Lists)
@@ -265,10 +275,6 @@
 
 (deftest t-Comment)
 
-;; Meta (^)
-
-(deftest t-Meta)
-
 ;; Deref (@)
 
 (deftest t-Deref)
@@ -281,9 +287,10 @@
 
 (deftest t-Regex)
 
-;; Metadata (#^)
+;; Metadata (^ or #^ (deprecated))
 
-(deftest t-Metadata)
+(deftest t-Metadata
+  (is (= (meta '^:static ^:awesome ^{:static false :bar :baz} sym) {:awesome true, :bar :baz, :static true})))
 
 ;; Var-quote (#')
 

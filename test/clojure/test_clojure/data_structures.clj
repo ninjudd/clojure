@@ -43,8 +43,8 @@
   ; numbers equality across types (see tests below - NOT IMPLEMENTED YET)
 
   ; ratios
-  (is (= 1/2 0.5))
-  (is (= 1/1000 0.001))
+  (is (== 1/2 0.5))
+  (is (== 1/1000 0.001))
   (is (not= 2/3 0.6666666666666666))
 
   ; vectors equal other seqs by items equality
@@ -517,6 +517,35 @@
       {} {:a 1 :b 2}
       #{} #{1 2} ))
 
+(deftest test-get
+  (let [m {:a 1, :b 2, :c {:d 3, :e 4}, :f nil, :g false, nil {:h 5}}]
+    (is (thrown? IllegalArgumentException (get-in {:a 1} 5)))
+    (are [x y] (= x y)
+         (get m :a) 1
+         (get m :e) nil
+         (get m :e 0) 0
+         (get m :b 0) 2
+         (get m :f 0) nil
+
+         (get-in m [:c :e]) 4
+         (get-in m '(:c :e)) 4
+         (get-in m [:c :x]) nil
+         (get-in m [:f]) nil
+         (get-in m [:g]) false
+         (get-in m [:h]) nil
+         (get-in m []) m
+         (get-in m nil) m
+
+         (get-in m [:c :e] 0) 4
+         (get-in m '(:c :e) 0) 4
+         (get-in m [:c :x] 0) 0
+         (get-in m [:b] 0) 2
+         (get-in m [:f] 0) nil
+         (get-in m [:g] 0) false
+         (get-in m [:h] 0) 0
+         (get-in m [:x :y] {:y 1}) {:y 1}
+         (get-in m [] 0) m
+         (get-in m nil 0) m)))
 
 ;; *** Sets ***
 
@@ -728,6 +757,7 @@
 
   ; identity
   (are [x] (= (disj x) x)
+      nil
       #{}
       #{1 2 3}
       ; different data types
@@ -753,6 +783,9 @@
       (sorted-set 1 2) )
 
   (are [x y] (= x y)
+      (disj nil :a) nil
+      (disj nil :a :b) nil
+
       (disj #{} :a) #{}
       (disj #{} :a :b) #{}
 
@@ -794,3 +827,4 @@
       (range 1 6) (-> EMPTY
                     (into (range 7))
                     pop))))
+

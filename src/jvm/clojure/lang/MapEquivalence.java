@@ -8,12 +8,10 @@
  *   You must not remove this notice, or any other, from this software.
  **/
 
-/* rich Nov 2, 2009 */
+/* rich Aug 4, 2010 */
 
 package clojure.lang;
 
-public interface ILookupHost{
-
-void swapThunk(int n, ILookupThunk thunk);
-
+//marker interface
+public interface MapEquivalence{
 }

@@ -19,7 +19,7 @@
 (definterface IVecImpl
   (^int tailoff [])
   (arrayFor [^int i])
-  (pushTail [^int level parent tailnode])
+  (pushTail [^int level ^clojure.core.VecNode parent ^clojure.core.VecNode tailnode])
   (popTail [^int level node])
   (newPath [edit ^int level node])
   (doAssoc [^int level node ^int i val]))
@@ -62,11 +62,11 @@
      (if (< aidx (count vec))
        (let [node (.arrayFor vec aidx)
              result (loop [result result
-                           node-idx (bit-and (int 0x1f) aidx)]
+                           node-idx (bit-and 0x1f aidx)]
                       (if (< node-idx (.alength am node))
                         (recur (f result (.aget am node node-idx)) (inc node-idx))
                         result))]
-         (recur result (bit-and (int 0xffe0) (+ aidx (int 32)))))
+         (recur result (bit-and 0xffe0 (+ aidx 32))))
        result)))
   
   clojure.lang.ISeq
@@ -119,7 +119,7 @@
 (defmethod print-method ::VecSeq [v w]
   ((get (methods print-method) clojure.lang.ISeq) v w))
 
-(deftype Vec [^clojure.core.ArrayManager am ^int cnt ^int shift root tail _meta]
+(deftype Vec [^clojure.core.ArrayManager am ^int cnt ^int shift ^clojure.core.VecNode root tail _meta]
   Object
   (equals [this o]
     (cond 
@@ -141,7 +141,7 @@
       (if (= i cnt)
         hash
         (let [val (.nth this i)]
-          (recur (unchecked-add (unchecked-multiply (int 31) hash) 
+          (recur (unchecked-add-int (unchecked-multiply-int 31 hash) 
                                 (clojure.lang.Util/hash val)) 
                  (inc i))))))
 
@@ -192,7 +192,7 @@
                (= (.nth this i) (nth o i)) (recur (inc i))
                :else false)))
      (or (instance? clojure.lang.Sequential o) (instance? java.util.List o))
-       (= (seq this) (seq o))
+       (clojure.lang.Util/equiv (seq this) (seq o))
      :else false))
 
   clojure.lang.IPersistentStack
@@ -212,7 +212,7 @@
         (new Vec am (dec cnt) shift root new-tail (meta this)))
     :else
       (let [new-tail (.arrayFor this (- cnt 2))
-            new-root (.popTail this shift root)]
+            new-root ^clojure.core.VecNode (.popTail this shift root)]
         (cond
          (nil? new-root) 
            (new Vec am (dec cnt) shift EMPTY-NODE new-tail (meta this))
@@ -300,6 +300,7 @@
 
   (pushTail [this level parent tailnode]
     (let [subidx (bit-and (bit-shift-right (dec cnt) level) (int 0x1f))
+          parent ^clojure.core.VecNode parent
           ret (VecNode. (.edit parent) (aclone ^objects (.arr parent)))
           node-to-insert (if (= level (int 5))
                            tailnode
@@ -311,7 +312,8 @@
       ret))
 
   (popTail [this level node]
-    (let [subidx (bit-and (bit-shift-right (- cnt 2) level) (int 0x1f))]
+    (let [node ^clojure.core.VecNode node
+          subidx (bit-and (bit-shift-right (- cnt (int 2)) level) (int 0x1f))]
       (cond
        (> level 5) 
          (let [new-child (.popTail this (- level 5) (aget ^objects (.arr node) subidx))]
@@ -332,16 +334,17 @@
         (aset ^objects (.arr ret) 0 (.newPath this edit (- level (int 5)) node))
         ret)))
 
-  (doAssoc [this level node i val] 
-    (if (zero? level)
-      ;on this branch, array will need val type
-      (let [arr (.aclone am (.arr node))]
-        (.aset am arr (bit-and i (int 0x1f)) val)
-        (VecNode. (.edit node) arr))
-      (let [arr (aclone ^objects (.arr node))
-            subidx (bit-and (bit-shift-right i level) (int 0x1f))]
-        (aset arr subidx (.doAssoc this (- level (int 5)) (aget arr subidx) i val))
-        (VecNode. (.edit node) arr))))
+  (doAssoc [this level node i val]
+    (let [node ^clojure.core.VecNode node]       
+      (if (zero? level)
+        ;on this branch, array will need val type
+        (let [arr (.aclone am (.arr node))]
+          (.aset am arr (bit-and i (int 0x1f)) val)
+          (VecNode. (.edit node) arr))
+        (let [arr (aclone ^objects (.arr node))
+              subidx (bit-and (bit-shift-right i level) (int 0x1f))]
+          (aset arr subidx (.doAssoc this (- level (int 5)) (aget arr subidx) i val))
+          (VecNode. (.edit node) arr)))))
 
   java.lang.Comparable
   (compareTo [this o]

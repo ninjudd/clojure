@@ -57,6 +57,12 @@
       :serialization
       :rt
       :repl
+      :java.io
+      :string
+      :java.javadoc
+      :java.shell
+      :transients
+      :def
       ])
 
 (def test-namespaces

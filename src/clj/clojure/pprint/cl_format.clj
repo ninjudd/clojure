@@ -247,7 +247,7 @@ http://www.lispworks.com/documentation/HyperSpec/Body/22_c.htm
 for improved performance"
   [base val]
   (let [format-str (get java-base-formats base)]
-    (if (and format-str (integer? val))
+    (if (and format-str (integer? val) (not (instance? clojure.lang.BigInt val)))
       (clojure.core/format format-str val)
       (base-str base val))))
 
@@ -425,9 +425,9 @@ Note this should only be used for the last one in the sequence"
                     not-teens (or (< 11 low-two-digits) (> 19 low-two-digits))
                     low-digit (rem low-two-digits 10)]
                 (print (cond 
-                        (and (= low-digit 1) not-teens) "st"
-                        (and (= low-digit 2) not-teens) "nd"
-                        (and (= low-digit 3) not-teens) "rd"
+                        (and (== low-digit 1) not-teens) "st"
+                        (and (== low-digit 2) not-teens) "nd"
+                        (and (== low-digit 3) not-teens) "rd"
                         :else "th")))))))
     navigator))
 
@@ -836,7 +836,7 @@ Note this should only be used for the last one in the sequence"
         args (init-navigator arg-list)]
     (loop [count 0
            args args
-           last-pos -1]
+           last-pos (num -1)]
       (if (and (not max-count) (= (:pos args) last-pos) (> count 1))
         ;; TODO get the offset in here and call format exception
         (throw (RuntimeException. "%{ construct not consuming any arguments: Infinite loop!")))
@@ -882,7 +882,7 @@ Note this should only be used for the last one in the sequence"
                              [param-clause navigator])]
     (loop [count 0
            navigator navigator
-           last-pos -1]
+           last-pos (num -1)]
       (if (and (not max-count) (= (:pos navigator) last-pos) (> count 1))
         ;; TODO get the offset in here and call format exception
         (throw (RuntimeException. "%@{ construct not consuming any arguments: Infinite loop!")))
@@ -1095,9 +1095,9 @@ Note this should only be used for the last one in the sequence"
 
             Integer
             (let [c (char x)]
-              (let [mod-c (if @last-was-whitespace? (Character/toUpperCase ^Character (char x)) c)] 
+              (let [mod-c (if @last-was-whitespace? (Character/toUpperCase (char x)) c)]
                 (.write writer (int mod-c))
-                (dosync (ref-set last-was-whitespace? (Character/isWhitespace ^Character (char x))))))))))))
+                (dosync (ref-set last-was-whitespace? (Character/isWhitespace (char x))))))))))))
 
 (defn- init-cap-writer
   "Returns a proxy that wraps writer, capitalizing the first word"
@@ -1884,13 +1884,7 @@ format-in can be either a control string or a previously compiled format."
   {:added "1.2"}
   [format-in]
   `(let [format-in# ~format-in
-         my-c-c# (var-get (get (ns-interns (the-ns 'clojure.pprint))
-                               '~'cached-compile))
-         my-e-f# (var-get (get (ns-interns (the-ns 'clojure.pprint))
-                               '~'execute-format))
-         my-i-n# (var-get (get (ns-interns (the-ns 'clojure.pprint))
-                               '~'init-navigator))
-         cf# (if (string? format-in#) (my-c-c# format-in#) format-in#)]
+         cf# (if (string? format-in#) (#'clojure.pprint/cached-compile format-in#) format-in#)]
      (fn [& args#]
-       (let [navigator# (my-i-n# args#)]
-         (my-e-f# cf# navigator#)))))
+       (let [navigator# (#'clojure.pprint/init-navigator args#)]
+         (#'clojure.pprint/execute-format cf# navigator#)))))

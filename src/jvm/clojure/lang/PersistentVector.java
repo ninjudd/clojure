@@ -621,11 +621,11 @@ static final class TransientVector extends AFn implements ITransientVector, Coun
 		int newshift = shift;
 		if(newroot == null)
 			{
-			newroot = EMPTY_NODE;
+			newroot = new Node(root.edit);
 			}
 		if(shift > 5 && newroot.array[1] == null)
 			{
-			newroot = (Node) newroot.array[0];
+			newroot = ensureEditable((Node) newroot.array[0]);
 			newshift -= 5;
 			}
 		root = newroot;

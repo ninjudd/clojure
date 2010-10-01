@@ -10,32 +10,10 @@
 
 (ns clojure.test-clojure.protocols
   (:use clojure.test clojure.test-clojure.protocols.examples)
-  (:require [clojure.test-clojure.protocols.more-examples :as other])
+  (:require [clojure.test-clojure.protocols.more-examples :as other]
+            [clojure.set :as set]
+            clojure.test-clojure.helpers)
   (:import [clojure.test_clojure.protocols.examples ExampleInterface]))
-
-(defn causes
-  [^Throwable throwable]
-  (loop [causes []
-         t throwable]
-    (if t (recur (conj causes t) (.getCause t)) causes)))
-
-;; this is how I wish clojure.test/thrown? worked...
-;; Does body throw expected exception, anywhere in the .getCause chain?
-(defmethod assert-expr 'fails-with-cause?
-  [msg [_ exception-class msg-re & body :as form]]
-  `(try
-   ~@body
-   (report {:type :fail, :message ~msg, :expected '~form, :actual nil})
-   (catch Throwable t#
-     (if (some (fn [cause#]
-                 (and
-                  (= ~exception-class (class cause#))
-                  (re-find ~msg-re (.getMessage cause#))))
-               (causes t#))
-       (report {:type :pass, :message ~msg,
-                :expected '~form, :actual t#})
-       (report {:type :fail, :message ~msg,
-                :expected '~form, :actual t#})))))
 
 ;; temporary hack until I decide how to cleanly reload protocol
 (defn reload-example-protocols
@@ -66,10 +44,19 @@
   (getValue [_] v))
 
 (deftest protocols-test
+  (testing "protocol fns have useful metadata"
+    (let [common-meta {:ns (find-ns 'clojure.test-clojure.protocols.examples)
+                       :protocol #'ExampleProtocol}]
+      (are [m f] (= (merge (quote m) common-meta)
+                    (meta (var f)))
+           {:name foo :arglists ([a]) :doc "method with one arg"} foo
+           {:name bar :arglists ([a b]) :doc "method with two args"} bar
+           {:name baz :arglists ([a] [a b]) :doc "method with multiple arities" :tag String} baz
+           {:name with-quux :arglists ([a]) :doc "method name with a hyphen"} with-quux)))
   (testing "protocol fns throw IllegalArgumentException if no impl matches"
     (is (thrown-with-msg?
           IllegalArgumentException
-          #"No implementation of method: :foo of protocol: #'clojure.test-clojure.protocols.examples/ExampleProtocol found for class: java.lang.Integer"
+          #"No implementation of method: :foo of protocol: #'clojure.test-clojure.protocols.examples/ExampleProtocol found for class: java.lang.Long"
           (foo 10))))
   (testing "protocols generate a corresponding interface using _ instead of - for method names"
     (is (= ["bar" "baz" "baz" "foo" "with_quux"] (method-names clojure.test_clojure.protocols.examples.ExampleProtocol))))
@@ -82,7 +69,13 @@
     (let [obj (reify ExampleProtocol
                      (baz [a b] "two-arg baz!"))]
       (is (= "two-arg baz!" (baz obj nil)))
-      (is (thrown? AbstractMethodError (baz obj))))))
+      (is (thrown? AbstractMethodError (baz obj)))))
+  (testing "you can redefine a protocol with different methods"
+    (eval '(defprotocol Elusive (old-method [x])))
+    (eval '(defprotocol Elusive (new-method [x])))
+    (is (= :new-method (eval '(new-method (reify Elusive (new-method [x] :new-method))))))
+    (is (fails-with-cause? IllegalArgumentException #"No method of interface: user\.Elusive found for function: old-method of protocol: Elusive \(The protocol method may have been defined before and removed\.\)"
+          (eval '(old-method (reify Elusive (new-method [x] :new-method))))))))
 
 (deftype ExtendTestWidget [name])
 (deftype HasProtocolInline []
@@ -182,20 +175,21 @@
 (defrecord DefrecordObjectMethodsWidgetA [a])
 (defrecord DefrecordObjectMethodsWidgetB [a])
 (deftest defrecord-object-methods-test
-  (testing ".equals depends on fields and type"
-    (is (true? (.equals (DefrecordObjectMethodsWidgetA. 1) (DefrecordObjectMethodsWidgetA. 1))))
-    (is (false? (.equals (DefrecordObjectMethodsWidgetA. 1) (DefrecordObjectMethodsWidgetA. 2))))
-    (is (false? (.equals (DefrecordObjectMethodsWidgetA. 1) (DefrecordObjectMethodsWidgetB. 1)))))
-  (testing ".hashCode depends on fields and type"
-    (is (= (.hashCode (DefrecordObjectMethodsWidgetA. 1)) (.hashCode (DefrecordObjectMethodsWidgetA. 1))))
-    (is (= (.hashCode (DefrecordObjectMethodsWidgetA. 2)) (.hashCode (DefrecordObjectMethodsWidgetA. 2))))
-    (is (not= (.hashCode (DefrecordObjectMethodsWidgetA. 1)) (.hashCode (DefrecordObjectMethodsWidgetA. 2))))
-    (is (= (.hashCode (DefrecordObjectMethodsWidgetB. 1)) (.hashCode (DefrecordObjectMethodsWidgetB. 1))))
-    (is (not= (.hashCode (DefrecordObjectMethodsWidgetA. 1)) (.hashCode (DefrecordObjectMethodsWidgetB. 1))))))
+  (testing "= depends on fields and type"
+    (is (true? (= (DefrecordObjectMethodsWidgetA. 1) (DefrecordObjectMethodsWidgetA. 1))))
+    (is (false? (= (DefrecordObjectMethodsWidgetA. 1) (DefrecordObjectMethodsWidgetA. 2))))
+    (is (false? (= (DefrecordObjectMethodsWidgetA. 1) (DefrecordObjectMethodsWidgetB. 1))))))
 
 (deftest defrecord-acts-like-a-map
   (let [rec (r 1 2)]
-    (is (= (r 1 3 {} {:c 4}) (merge rec {:b 3 :c 4})))))
+    (is (.equals (r 1 3 {} {:c 4}) (merge rec {:b 3 :c 4})))
+    (is (.equals {:foo 1 :b 2} (set/rename-keys rec {:a :foo})))
+    (is (.equals {:a 11 :b 2 :c 10} (merge-with + rec {:a 10 :c 10})))))
+
+(deftest degenerate-defrecord-test
+  (let [empty (EmptyRecord.)]
+    (is (nil? (seq empty)))
+    (is (not (.containsValue empty :a)))))
 
 (deftest defrecord-interfaces-test
   (testing "java.util.Map"
@@ -226,6 +220,15 @@
         (is (= (r 1 3) (.cons rec {:b 3})))
         (is (= (r 1 4) (.cons rec [:b 4])))
         (is (= (r 1 5) (.cons rec (MapEntry. :b 5))))))))
+
+(defrecord RecordWithSpecificFieldNames [this that k m o])
+(deftest defrecord-with-specific-field-names
+  (let [rec (new RecordWithSpecificFieldNames 1 2 3 4 5)]
+    (is (= rec rec))
+    (is (= 1 (:this (with-meta rec {:foo :bar}))))
+    (is (= 3 (get rec :k)))
+    (is (= (seq rec) '([:this 1] [:that 2] [:k 3] [:m 4] [:o 5])))
+    (is (= (dissoc rec :k) {:this 1, :that 2, :m 4, :o 5}))))
 
 (deftest reify-test
   (testing "of an interface"

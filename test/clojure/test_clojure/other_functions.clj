@@ -19,8 +19,8 @@
 
 (deftest test-identity
   ; exactly 1 argument needed
-  (is (thrown? IllegalArgumentException (identity)))
-  (is (thrown? IllegalArgumentException (identity 1 2)))
+;  (is (thrown? IllegalArgumentException (identity)))
+;  (is (thrown? IllegalArgumentException (identity 1 2)))
 
   (are [x] (= (identity x) x)
       nil
@@ -43,6 +43,32 @@
       (+ 1 2) 3
       (> 5 0) true ))
 
+
+(deftest test-name
+  (are [x y] (= x (name y))
+       "foo" :foo
+       "bar" 'bar
+       "quux" "quux"))
+
+(deftest test-fnil
+  (let [f1 (fnil vector :a)
+        f2 (fnil vector :a :b)
+        f3 (fnil vector :a :b :c)]
+    (are [result input] (= result [(apply f1 input) (apply f2 input) (apply f3 input)])
+         [[1 2 3 4] [1 2 3 4] [1 2 3 4]]  [1 2 3 4]
+         [[:a 2 3 4] [:a 2 3 4] [:a 2 3 4]] [nil 2 3 4]
+         [[:a nil 3 4] [:a :b 3 4] [:a :b 3 4]] [nil nil 3 4]
+         [[:a nil nil 4] [:a :b nil 4] [:a :b :c 4]] [nil nil nil 4]
+         [[:a nil nil nil] [:a :b nil nil] [:a :b :c nil]] [nil nil nil nil]))
+  (are [x y] (= x y)
+       ((fnil + 0) nil 42) 42
+       ((fnil conj []) nil 42) [42]
+       (reduce #(update-in %1 [%2] (fnil inc 0)) {} 
+               ["fun" "counting" "words" "fun"])
+       {"words" 1, "counting" 1, "fun" 2}
+       (reduce #(update-in %1 [(first %2)] (fnil conj []) (second %2)) {} 
+               [[:a 1] [:a 2] [:b 3]])
+       {:b [3], :a [1 2]}))
 
 ; time assert comment doc
 
