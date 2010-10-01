@@ -186,7 +186,7 @@ static Keyword LINE_KEY = Keyword.intern(null, "line");
 static Keyword FILE_KEY = Keyword.intern(null, "file");
 static Keyword DECLARED_KEY = Keyword.intern(null, "declared");
 final static public Var USE_CONTEXT_CLASSLOADER =
-		Var.intern(CLOJURE_NS, Symbol.create("*use-context-classloader*"), null);
+		Var.intern(CLOJURE_NS, Symbol.create("*use-context-classloader*"), T);
 //final static public Var CURRENT_MODULE = Var.intern(Symbol.create("clojure.core", "current-module"),
 //                                                    Module.findOrCreateModule("clojure/user"));
 
@@ -1571,15 +1571,24 @@ static public Object[] setValues(Object... vals){
 static public ClassLoader makeClassLoader(){
 	return (ClassLoader) AccessController.doPrivileged(new PrivilegedAction(){
 		public Object run(){
-			return new DynamicClassLoader(Thread.currentThread().getContextClassLoader());
+            try{
+            Var.pushThreadBindings(RT.map(USE_CONTEXT_CLASSLOADER, RT.T));
+//			getRootClassLoader();
+			return new DynamicClassLoader(baseLoader());
+            }
+                finally{
+            Var.popThreadBindings();
+            }
 		}
 	});
 }
 
 static public ClassLoader baseLoader(){
-	if(Compiler.LOADER.isBound() && !booleanCast(USE_CONTEXT_CLASSLOADER.deref()))
+	if(Compiler.LOADER.isBound())
 		return (ClassLoader) Compiler.LOADER.deref();
-	return Thread.currentThread().getContextClassLoader();
+	else if(booleanCast(USE_CONTEXT_CLASSLOADER.deref()))
+		return Thread.currentThread().getContextClassLoader();
+	return Compiler.class.getClassLoader();
 }
 
 static public Class classForName(String name) throws ClassNotFoundException{
