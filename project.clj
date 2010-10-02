@@ -1,4 +1,4 @@
-(defproject clojure "1.2.0"
+(defproject clojure "1.3.0-SNAPSHOT"
   :description "The Clojure programming language"
   :aot [:exclude clojure.parallel]
   :main clojure.main
