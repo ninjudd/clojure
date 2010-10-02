@@ -1,3 +1,6 @@
+.cake
+clojure
+lib
 test-classes/*
 classes/*
 *jar
